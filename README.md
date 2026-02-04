@@ -1,7 +1,7 @@
 # rtc_tool_app
 This directory contains the problem definitions and configurations used by the RTC-Tools application for reservoir operation optimization.
 
-Directory Structure:
+**Directory Structure:**
 
 ```text
 problems/
@@ -26,15 +26,15 @@ problems/
 │ │ └── timeseries_export.csv
 │ └── README.md
 ```
-Overview of Each Component:
+**Overview of Each Component:**
 
-single_reservoir
+__single_reservoir__
 
 Contains the setup for the single reservoir optimization problem.
 
 Purpose: Determine optimal release quantities given rainfall and inflow for one reservoir.
 
-Key Files:
+__Key Files:__
 
 input files: timeseries_import.csv inflow from WVIC data at 6-hour step
 
@@ -47,13 +47,13 @@ output file — timeseries_export.csv optimal release quantity inflow at 6-hour 
 
 
 
-reservoir_with_dam (multi_res)
+__reservoir_with_dam (multi_res)__
 
 Defines the optimization setup for the reservoir + downstream dam system.
 
 Purpose: Jointly optimize release from an upstream reservoir and operations at a downstream dam.
 
-Key Files:
+__Key Files:__
 
 input files: timeseries_import.csv inflow from WVIC data at 6-hour step
 
@@ -65,7 +65,7 @@ output file — timeseries_export.csv optimal release quantity inflow at 6-hour 
 
 
 
-How to Use:
+__How to Use:__
 
 1. create a virtual environment using python 
 python -m venv env
