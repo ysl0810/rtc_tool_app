@@ -76,7 +76,7 @@ env/Scripts/Activate
 3. install rtc-tool 2.7
 pip install rtc-tools==2.7.3
 
-4 execute the script
+4. execute the script
 naivagate to the python script path (e.g. cd problem/single_res/src) and then call python model_single_res.py. the optimized quantity will be saved in output folder.
 
 5. do not change the folder structure otherwise the model will report errors
