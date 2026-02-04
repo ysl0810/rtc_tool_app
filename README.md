@@ -3,28 +3,29 @@ This directory contains the problem definitions and configurations used by the R
 
 Directory Structure:
 
+```text
 problems/
 ├── single_res/
 │ ├── model/
-│ │ └──Reservior.mo
+│ │ └── Reservior.mo
 │ ├── input/
-│ │ └──timeseries_import.csv
+│ │ └── timeseries_import.csv
 │ ├── src/
-│ │ └──model_singel_res.py
+│ │ └── model_single_res.py
 │ ├── output/
-│ │ └──timeseries_export.csv
+│ │ └── timeseries_export.csv
 │ └── README.md
 ├── multi_res/
 │ ├── model/
-│ │ └──MultiReserviorSystem.mo
+│ │ └── MultiReserviorSystem.mo
 │ ├── input/
-│ │ └──timeseries_import.csv
+│ │ └── timeseries_import.csv
 │ ├── src/
-│ │ └──model_Multi_res.py
+│ │ └── model_Multi_res.py
 │ ├── output/
-│ │ └──timeseries_export.csv
+│ │ └── timeseries_export.csv
 │ └── README.md
-
+```
 Overview of Each Component:
 
 single_reservoir
