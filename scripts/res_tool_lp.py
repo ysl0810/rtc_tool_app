@@ -30,9 +30,27 @@ import pulp
 from scipy.interpolate import interp1d
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ─────────────────────────────────────────────────────────────────────────────
+
+OBJECTIVE_MODES = ("minimize_release", "maximize_profit", "minimize_spill")
+
+RHO = 1000    # water density (kg/m³)
+G   = 9.8     # gravitational acceleration (m/s²)
+
+# Unit-conversion constants (imperial → metric)
+CFS_TO_M3S    = 0.028316846   # 1 ft³/s  = 0.3048³ m³/s  (exact: 0.028316846592)
+MCF_TO_M3     = 28.316846     # 1 MCF    = 1000 ft³ × CFS_TO_M3S  (m³)
+FT_TO_M       = 0.3048         # 1 ft     = 0.3048 m (exact)
+LOSS_FRACTION = 0.03         # typical friction loss fraction (dimensionless)
+TURBINE_EFFICIENCY = 0.85     # typical turbine efficiency (dimensionless)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # DATA STRUCTURES
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class ReservoirSpec:
@@ -48,15 +66,15 @@ class ReservoirSpec:
     head_elev:        List[float] = field(default_factory=list)   # elevations (ft)
     head_storage_mcf: List[float] = field(default_factory=list)   # storage (MCF)
     z_tailwater:        float = 0.0              # tailwater elevation (ft)
-    head_loss_fraction: float = 0.03             # friction loss fraction
+    head_loss_fraction: float = LOSS_FRACTION   # friction loss fraction
 
     def __post_init__(self):
         """Build interpolation functions from the curve data."""
         self._storage_to_elev = None
         self._elev_to_storage = None
         if self.head_elev and self.head_storage_mcf:
-            # Convert MCF to m³: 1 MCF = 1000 cf × 0.028316 m³/cf
-            storage_m3 = [s * 1000 * 0.028316 for s in self.head_storage_mcf]
+            # Convert MCF to m³ using exact conversion constant
+            storage_m3 = [s * MCF_TO_M3 for s in self.head_storage_mcf]
             elev = self.head_elev
             self._storage_to_elev = interp1d(
                 storage_m3, elev, kind='linear', fill_value='extrapolate'
@@ -82,7 +100,7 @@ class ReservoirSpec:
 
     def net_head_m(self, V: float) -> float:
         """Net hydraulic head in meters."""
-        return self.net_head(V) * 0.3048
+        return self.net_head(V) * FT_TO_M
 
     @property
     def has_elevation_curve(self) -> bool:
@@ -104,22 +122,18 @@ class PowerSpec:
     """Hydropower specification for a reservoir."""
     reservoir_name:     str            # reservoir with hydropower
     electricity_price:  float          # $/MWh
-    turbine_efficiency: float = 0.85   # dimensionless (typical 0.80–0.95)
+    turbine_efficiency: float = TURBINE_EFFICIENCY   # dimensionless (typical 0.80–0.95)
 
 
 @dataclass
 class PenaltyWeights:
     """Penalty weights for soft constraint violations."""
-    W_V_over:  float = 1_000_000.0    # $/m³ storage above Vmax
-    W_V_under: float = 100_000.0      # $/m³ storage below Vmin
-    W_Q_over:  float = 1_000_000.0    # $/(m³/s) dam flow above Qmax
-    W_Q_under: float = 10_000.0       # $/(m³/s) dam flow below Qmin
+    W_V_over:  float = 1000000    # $/m³ storage above Vmax
+    W_V_under: float = 100000      # $/m³ storage below Vmin
+    W_Q_over:  float = 1000000    # $/(m³/s) dam flow above Qmax
+    W_Q_under: float = 10000       # $/(m³/s) dam flow below Qmin
 
 
-OBJECTIVE_MODES = ("minimize_release", "maximize_profit", "minimize_spill")
-
-RHO = 998.0    # water density (kg/m³)
-G   = 9.81     # gravitational acceleration (m/s²)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -681,66 +695,81 @@ if __name__ == "__main__":
 
     # ── Reservoir specs ──────────────────────────────────────────────────
 
-    eau = ReservoirSpec(
-        name="eau",
-        V0=4400 * 0.028316 * 1e6,
-        Vmin=571 * 0.028316 * 1e6,
-        Vmax=4457 * 0.028316 * 1e6,
-        Qmin=80 * 0.028316,
-        Qmax=5000 * 0.028316,
-        Qin=[(q + 100) / 35.315 for q in
-             [1590, 1080, 1360, 1580, 1670, 1330, 1420, 1380, 1580, 831, 1410, 1420]],
-        head_elev=eau_elev,
-        head_storage_mcf=eau_mcf,
-        z_tailwater=1100.0,        # ← UPDATE with actual tailwater elevation (ft)
+    # NOTE: spirit_mcf curve only reaches 756 MCF (full pool at 1437.88 ft).
+    # V0/Vmin/Vmax must be within 0–756 MCF to avoid extrapolation.
+    # The values below (756/600/700 MCF) are corrected placeholders — update
+    # with actual Spirit Lake operating data if different values are intended.
+    spirit = ReservoirSpec(
+        name  = "spirit",
+        V0    = 700 * MCF_TO_M3,     # assumming this is the initial storage (MCF) — UPDATE with actual initial storage if different
+        # Vmin  = 0 * MCF_TO_M3,       # corresponding to 1420.88 ft (empty pool)
+        Vmin  = 592 * MCF_TO_M3,       # corresponding to 1436.00 ft 
+        Vmax  = 756 * MCF_TO_M3,     # corresponding to 1437.88 ft (full pool)
+        Qmin  = 80 * CFS_TO_M3S,     # not given assume the same as Eau Claire — UPDATE with actual minimum release if different
+        Qmax  = 2000 * CFS_TO_M3S,
+        Qin   = [(q) * CFS_TO_M3S for q in
+                 [454, 409, 349, 313, 307, 300,
+                  328, 357, 422, 476, 486, 504]],       # (04/01/2025-04/04/2025) data are 6-hourly inflows in CFS from https://waterdata.usgs.gov/monitoring-location/USGS-05393500/#dataTypeId=continuous-00060-0&showFieldMeasurements=true&startDT=2025-04-01&endDT=2025-04-04 — UPDATE with actual inflow data if different
+        head_elev=spirit_elev,
+        head_storage_mcf=spirit_mcf,
+        z_tailwater=1410.0,             # ← UPDATE with actual tailwater elevation (ft)  pool elavation 1464.88-55(dam height)~=1410 ft 
         head_loss_fraction=0.03,
     )
 
-    spirit = ReservoirSpec(
-        name="spirit",
-        V0=1140 * 0.028316 * 1e6,
-        Vmin=1125 * 0.028316 * 1e6,
-        Vmax=1145 * 0.028316 * 1e6,
-        Qmin=80 * 0.028316,
-        Qmax=2000 * 0.028316,
-        Qin=[(q + 100) / 35.315 for q in
-             [1200.35, 1200.35, 1000.82, 900.58, 1300.25, 1500.25,
-              1400.68, 1500.25, 1450.25, 1350.58, 1252.82, 1140.92]],
-        head_elev=spirit_elev,
-        head_storage_mcf=spirit_mcf,
-        z_tailwater=1410.0,        # ← UPDATE with actual tailwater elevation (ft)
-        head_loss_fraction=0.03,
+
+    eau = ReservoirSpec(
+        name="eau",
+        V0   = 4400 * MCF_TO_M3,     # assumming this is the initial storage (MCF) — UPDATE with actual initial storage if different
+        # Vmin = 571 * MCF_TO_M3,      # corresponding to 1125.00 ft (empty pool)
+        Vmin = 3453 * MCF_TO_M3,      # corresponding to 1142.00 ft 
+        Vmax = 4457 * MCF_TO_M3,     # corresponding to 1145.43 ft (full pool)
+        Qmin = 80 * CFS_TO_M3S,
+        Qmax = 5000 * CFS_TO_M3S,
+        Qin  = [(q) * CFS_TO_M3S for q in
+             [1830, 1430, 1130, 933, 798, 686, 608, 794, 1660, 1510, 1220, 952]],       # (04/01/2025-04/04/2025) data are 6-hourly inflows in CFS from https://waterdata.usgs.gov/monitoring-location/USGS-05399500/#dataTypeId=continuous-00060-0&showFieldMeasurements=true&startDT=2025-04-01&endDT=2025-04-04 — UPDATE with actual inflow data if different
+        head_elev         = eau_elev,
+        head_storage_mcf  = eau_mcf,
+        z_tailwater       = 1100.0,        # ← UPDATE with actual tailwater elevation (ft). pool elavation 1145-30(dam height)=1100 ft net head at full pool
+        head_loss_fraction= 0.03,
     )
 
     # ── Dam specs ────────────────────────────────────────────────────────
 
     merril = DamSpec(
         "merril",
-        900 * 0.028316,
-        3400 * 0.028316,
+        # 900 * CFS_TO_M3S,
+        # 3400 * CFS_TO_M3S,
+        
+        1000 * CFS_TO_M3S, # given the original constraints (900–3400 CFS) are too tight for the inflows, these are relaxed placeholders — UPDATE with actual Qmin/Qmax if different
+        8000 * CFS_TO_M3S, # given the original constraints (900–3400 CFS) are too tight for the inflows, these are relaxed placeholders — UPDATE with actual Qmin/Qmax if different
+
         "spirit",
-        [(q) / 35.315 for q in np.random.normal(1200, 100, n)],
+        [(q) * CFS_TO_M3S for q in [6930, 6300, 6790, 6730, 5730, 5360, 4700, 4730, 4660, 4460, 4750, 4840]],       # (04/01/2025-04/04/2025) data are 6-hourly inflows in CFS from https://waterdata.usgs.gov/monitoring-location/USGS-05395000/#dataTypeId=continuous-00060-0&showFieldMeasurements=true&startDT=2025-04-01&endDT=2025-04-04 — UPDATE with actual inflow data if different
+     
     )
 
     wis_rap = DamSpec(
         "wis_rap",
-        1300 * 0.028316,
-        2850 * 0.028316,
+        # 1300 * CFS_TO_M3S,
+        # 2850 * CFS_TO_M3S,
+        
+        13000 * CFS_TO_M3S,  # given the original constraints (1300–2850 CFS) are too tight for the inflows, these are relaxed placeholders — UPDATE with actual Qmin/Qmax if different
+        40000 * CFS_TO_M3S,  # given the original constraints (1300–2850 CFS) are too tight for the inflows, these are relaxed placeholders — UPDATE with actual Qmin/Qmax if different
+        
         "eau",
-        [(q) / 35.315 for q in np.random.normal(1500, 100, n)],
+        [(q) * CFS_TO_M3S for q in [35600, 32400, 28900, 26900, 24900, 22600, 21200, 21100, 20000, 18300, 17600, 17600]],       # (04/01/2025-04/04/2025) data are 6-hourly inflows in CFS from https://waterdata.usgs.gov/monitoring-location/USGS-05400760/#dataTypeId=continuous-00060-0&showFieldMeasurements=true&startDT=2025-04-01&endDT=2025-04-04 — UPDATE with actual inflow data if different    )
     )
-
     # ── Power specs ──────────────────────────────────────────────────────
 
     eau_power = PowerSpec(
         reservoir_name="eau",
-        electricity_price=50.0,     # $/MWh
+        electricity_price=50.0,     # $/MWh # assumed 
         turbine_efficiency=0.85,
     )
 
     spirit_power = PowerSpec(
         reservoir_name="spirit",
-        electricity_price=50.0,     # $/MWh
+        electricity_price=50.0,     # $/MWh # assumed 
         turbine_efficiency=0.85,
     )
 
